@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getMe } from "@/services/adminService";
+import { getMe, logout } from "@/services/adminService";
 import AdminSidebar from "./AdminSidebar";
 import { Loader2, Bell, Search, User } from "lucide-react";
 
@@ -20,6 +20,7 @@ export default function RootAdminLayout({ children }) {
   const router = useRouter();
   const [admin, setAdmin] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   useEffect(() => {
@@ -31,11 +32,14 @@ export default function RootAdminLayout({ children }) {
       // [Authorization / RBAC] This client check is UX only; backend admin APIs still enforce protect()+authorize("admin").
       const res = await getMe();
       if (res.data.role !== "admin") {
+        await logout();
         router.push("/login?error=unauthorized");
       } else {
         setAdmin(res.data);
+        setIsAuthorized(true);
       }
     } catch (err) {
+      await logout();
       router.push("/login");
     } finally {
       setLoading(false);
@@ -48,6 +52,10 @@ export default function RootAdminLayout({ children }) {
         <Loader2 className="w-12 h-12 text-terracotta animate-spin" />
       </div>
     );
+  }
+
+  if (!isAuthorized) {
+    return null;
   }
 
   return (

@@ -27,7 +27,9 @@ export default function AdminDashboard() {
       setStats(statsRes.data);
       setAuditStats(auditRes?.data || { success: 0, failure: 0, total: 0 });
     } catch (err) {
-      console.error(err);
+      if (process.env.NODE_ENV === "development") {
+        console.error("Admin dashboard stats request failed");
+      }
     } finally {
       setLoading(false);
     }

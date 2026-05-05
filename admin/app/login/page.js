@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import AuthLayout from "@/components/AuthLayout";
-import { createLoginFlow, submitLogin } from "@/services/adminService";
+import { createLoginFlow, submitLogin, getMe, logout } from "@/services/adminService";
 import { toast } from "react-hot-toast";
 import { Mail, Key, ArrowRight, ShieldCheck, Loader2 } from "lucide-react";
 
@@ -17,6 +17,24 @@ export default function AdminLoginPage() {
     password: "",
   });
 
+  const validateAdminSession = async () => {
+    try {
+      const res = await getMe();
+      if (res?.data?.role === "admin") {
+        router.replace("/dashboard");
+        return true;
+      }
+      await logout();
+      toast.error("This account is not authorized for the admin panel.");
+    } catch (err) {
+      await logout();
+      if (err?.response?.status === 403) {
+        toast.error(err.response?.data?.message || "Admin access is not available for this account.");
+      }
+    }
+    return false;
+  };
+
   useEffect(() => {
     const INIT_MS = 30_000;
     const withTimeout = (promise, ms) =>
@@ -29,22 +47,24 @@ export default function AdminLoginPage() {
 
     const initFlow = async () => {
       try {
+        if (await validateAdminSession()) {
+          return;
+        }
         const flowData = await withTimeout(createLoginFlow(), INIT_MS);
         setFlow(flowData);
       } catch (err) {
         if (process.env.NODE_ENV === "development") {
-          console.error("Error initializing login flow:", err);
+          console.error("Admin login flow initialization failed");
         }
         if (err.message === "LOGIN_FLOW_TIMEOUT") {
           toast.error("Login setup timed out. Check ORY_SDK_URL / NEXT_PUBLIC_ORY_SDK_URL and your network, then restart the dev server.");
         } else if (err.response?.status === 400) {
           /**
            * [Authentication] Ory returns 400 when an active session already exists.
-           * Redirect to dashboard rather than showing an error — the admin is already
-           * authenticated. Using replace() prevents the login page from staying in history.
+           * Only redirect if the backend confirms the session belongs to an
+           * authorized admin; otherwise clear the stale/non-admin Ory session.
            */
-          router.replace("/dashboard");
-          return;
+          await validateAdminSession();
         } else {
           toast.error("Failed to initialize security flow. Set ORY_SDK_URL or NEXT_PUBLIC_ORY_SDK_URL in admin .env.local.");
         }
@@ -74,24 +94,54 @@ export default function AdminLoginPage() {
 
       await submitLogin(flow.id, formData, csrfToken);
 
+      let res;
+      try {
+        res = await getMe();
+      } catch (authErr) {
+        await logout();
+        const message = authErr?.response?.status === 403
+          ? authErr.response?.data?.message || "This account is not authorized for the admin panel."
+          : "Admin session could not be verified.";
+        toast.error(message);
+        setFlow(null);
+        window.location.href = "/login";
+        return;
+      }
+
+      if (res?.data?.role !== "admin") {
+        await logout();
+        toast.error("This account is not authorized for the admin panel.");
+        setFlow(null);
+        window.location.href = "/login";
+        return;
+      }
+
       toast.success("Identity verified. Welcome, Administrator.");
       router.push("/dashboard");
     } catch (err) {
-      console.error("Login error:", err);
+      if (process.env.NODE_ENV === "development") {
+        console.error("Admin login request failed");
+      }
       
       const uiMessages = err.response?.data?.ui?.messages;
       const nodeMessages = err.response?.data?.ui?.nodes
         ?.flatMap(node => node.messages || [])
         ?.map(m => m.text);
       
-      const message = uiMessages?.[0]?.text || nodeMessages?.[0] || "Invalid credentials.";
+      const message = uiMessages?.[0]?.text || nodeMessages?.[0] || err.response?.data?.message || "Invalid credentials.";
       toast.error(message);
 
       // Re-initialize flow if expired
       if (err.response?.status === 410 || err.response?.status === 403) {
         setInitializing(true);
-        const flowData = await createLoginFlow();
-        setFlow(flowData);
+        try {
+          const flowData = await createLoginFlow();
+          setFlow(flowData);
+        } catch {
+          await logout();
+          window.location.href = "/login";
+          return;
+        }
         setInitializing(false);
       }
     } finally {

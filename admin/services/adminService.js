@@ -55,10 +55,9 @@ export const logout = async () => {
     if (data?.logout_token) {
       await ory.updateLogoutFlow({ token: data.logout_token });
     }
-  } catch (err) {
-    if (err.response?.status !== 401) {
-      console.error("Ory logout error:", err.response?.data || err.message);
-    }
+  } catch {
+    // Logout is best-effort. Suppress details so auth/proxy internals are not
+    // exposed in browser logs during stale-session cleanup.
   }
 };
 
