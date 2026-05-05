@@ -31,7 +31,7 @@ export default function DashboardOverview() {
   const [stats, setStats] = useState({
     totalProjects: 0,
     completedScans: 0,
-    criticalFindings: 8 
+    criticalFindings: 0,
   });
   const [loading, setLoading] = useState(true);
 
@@ -45,10 +45,15 @@ export default function DashboardOverview() {
         
         setUser(meRes.data);
         const projects = projectsRes.data.data;
+        const criticalFindings = projects.reduce(
+          (sum, project) => sum + (project.findingsSummary?.critical || 0),
+          0
+        );
+
         setStats({
           totalProjects: projects.length,
           completedScans: projects.filter(p => p.scanStatus === "completed").length,
-          criticalFindings: 8
+          criticalFindings,
         });
       } catch (err) {
         

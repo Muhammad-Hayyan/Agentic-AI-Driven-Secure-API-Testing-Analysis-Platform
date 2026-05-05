@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AuthLayout from "@/components/AuthLayout";
-import { createLoginFlow, submitLogin, getSession } from "@/services/authService";
+import { createLoginFlow, submitLogin, getSession, getMe, logout } from "@/services/authService";
 import { toast } from "react-hot-toast";
 import { LogIn, Key, ArrowRight, Eye, EyeOff } from "lucide-react";
 
@@ -36,8 +36,21 @@ export default function LoginPage() {
         existing = null;
       }
       if (existing?.active) {
-        router.replace("/dashboard");
-        return;
+        try {
+          // Only redirect when backend authorization also passes.
+          await getMe();
+          router.replace("/dashboard");
+          return;
+        } catch (err) {
+          if (err?.response?.status === 403) {
+            // Active Ory session but email not verified for app access.
+            await logout();
+            toast.error("Please verify your email before signing in.");
+          } else {
+            // For transient failures, clear any potentially stale session and continue.
+            await logout();
+          }
+        }
       }
 
       try {
@@ -76,8 +89,20 @@ export default function LoginPage() {
       }
       // [CSRF] Ory requires the flow-specific csrf_token from trusted UI nodes before accepting login.
       await submitLogin(flow.id, formData, csrfToken);
-      toast.success("Welcome back!");
-      router.push("/dashboard");
+      try {
+        await getMe();
+        toast.success("Welcome back!");
+        router.push("/dashboard");
+      } catch (err) {
+        if (err?.response?.status === 403) {
+          await logout();
+          toast.error(err?.response?.data?.message || "Please verify your email before signing in.");
+          const flowData = await createLoginFlow();
+          setFlow(flowData);
+          return;
+        }
+        throw err;
+      }
     } catch (err) {
       if (process.env.NODE_ENV === "development") {
         console.error("Login request failed");

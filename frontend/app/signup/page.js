@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import AuthLayout from "@/components/AuthLayout";
-import { createRegistrationFlow, submitRegistration } from "@/services/authService";
+import { createRegistrationFlow, submitRegistration, logout } from "@/services/authService";
 import { toast } from "react-hot-toast";
 import { User, LogIn, Key, ArrowRight, Eye, EyeOff, CheckCircle2, Circle } from "lucide-react";
 
@@ -66,7 +66,13 @@ export default function SignupPage() {
     try {
       const csrfToken = flow.ui.nodes.find(node => node.attributes.name === "csrf_token")?.attributes.value;
       await submitRegistration(flow.id, formData, csrfToken);
-      toast.success("Account created successfully!");
+      /**
+       * Ory may create an active browser session immediately after registration.
+       * Explicitly clearing that session avoids auto-login on /login and keeps
+       * the expected "sign in manually after signup" flow.
+       */
+      await logout();
+      toast.success("Account created successfully! Please sign in.");
       setIsSuccess(true);
     } catch (err) {
       if (process.env.NODE_ENV === "development") {

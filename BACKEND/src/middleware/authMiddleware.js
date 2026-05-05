@@ -56,6 +56,29 @@ const isAdminEmail = (email) =>
   Boolean(email) && adminEmails.includes(email.toLowerCase());
 
 /**
+ * isOryEmailVerified: Determine whether the authenticated Ory identity has a
+ * verified email address.
+ *
+ * Ory typically exposes verification via identity.verifiable_addresses, but we
+ * also support common trait/metadata flags for compatibility.
+ */
+const isOryEmailVerified = (session) => {
+  const identity = session?.identity || {};
+  const verifiable = Array.isArray(identity.verifiable_addresses) ? identity.verifiable_addresses : [];
+  if (verifiable.some((entry) => entry?.verified === true)) {
+    return true;
+  }
+
+  const traits = identity?.traits || {};
+  if (traits.email_verified === true || traits.verified === true) {
+    return true;
+  }
+
+  const metadataPublic = identity?.metadata_public || {};
+  return metadataPublic.email_verified === true || metadataPublic.verified === true;
+};
+
+/**
  * protect: Verify an Ory session cookie and attach the authenticated user to req.
  *
  * [Authentication Bypass / API2:2023 - Broken Authentication]
@@ -97,6 +120,7 @@ exports.protect = async (req, res, next) => {
     const email         = session.identity.traits.email;
     const name          = session.identity.traits.name || email.split("@")[0];
     const shouldBeAdmin = isAdminEmail(email);
+    const emailVerified = isOryEmailVerified(session);
 
     if (!user) {
       // User exists by email but hasn't signed in via Ory before — link them
@@ -104,6 +128,7 @@ exports.protect = async (req, res, next) => {
 
       if (user) {
         user.oryId = session.identity.id;
+        user.isEmailVerified = emailVerified;
         if (shouldBeAdmin && user.role !== "admin") {
           user.role = "admin"; // [Missing or Incorrect Authorization] Server-side role promotion
         }
@@ -115,13 +140,31 @@ exports.protect = async (req, res, next) => {
           email:           email,
           name:            name,
           role:            shouldBeAdmin ? "admin" : "user",
-          isEmailVerified: true,
+          isEmailVerified: emailVerified,
         });
       }
-    } else if (shouldBeAdmin && user.role !== "admin") {
-      // Existing user whose email was added to ADMIN_EMAILS later
-      user.role = "admin";
-      await user.save();
+    } else {
+      let shouldSave = false;
+      if (shouldBeAdmin && user.role !== "admin") {
+        // Existing user whose email was added to ADMIN_EMAILS later
+        user.role = "admin";
+        shouldSave = true;
+      }
+      if (user.isEmailVerified !== emailVerified) {
+        user.isEmailVerified = emailVerified;
+        shouldSave = true;
+      }
+      if (shouldSave) {
+        await user.save();
+      }
+    }
+
+    // Enforce verified email before allowing access to protected API routes.
+    if (!emailVerified) {
+      return res.status(403).json({
+        success: false,
+        message: "Please verify your email address before continuing.",
+      });
     }
 
     // Attach the verified user to the request for downstream middleware/controllers
