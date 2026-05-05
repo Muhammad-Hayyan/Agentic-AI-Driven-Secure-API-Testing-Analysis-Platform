@@ -120,7 +120,7 @@ exports.protect = async (req, res, next) => {
     const email         = session.identity.traits.email;
     const name          = session.identity.traits.name || email.split("@")[0];
     const shouldBeAdmin = isAdminEmail(email);
-    const emailVerified = isOryEmailVerified(session);
+    const oryEmailVerified = isOryEmailVerified(session);
 
     if (!user) {
       // User exists by email but hasn't signed in via Ory before — link them
@@ -128,7 +128,6 @@ exports.protect = async (req, res, next) => {
 
       if (user) {
         user.oryId = session.identity.id;
-        user.isEmailVerified = emailVerified;
         if (shouldBeAdmin && user.role !== "admin") {
           user.role = "admin"; // [Missing or Incorrect Authorization] Server-side role promotion
         }
@@ -140,7 +139,7 @@ exports.protect = async (req, res, next) => {
           email:           email,
           name:            name,
           role:            shouldBeAdmin ? "admin" : "user",
-          isEmailVerified: emailVerified,
+          isEmailVerified: shouldBeAdmin || oryEmailVerified,
         });
       }
     } else {
@@ -150,8 +149,14 @@ exports.protect = async (req, res, next) => {
         user.role = "admin";
         shouldSave = true;
       }
-      if (user.isEmailVerified !== emailVerified) {
-        user.isEmailVerified = emailVerified;
+
+      const effectiveEmailVerified =
+        oryEmailVerified ||
+        shouldBeAdmin ||
+        (user.role === "admin" && user.isEmailVerified === true);
+
+      if (user.isEmailVerified !== effectiveEmailVerified) {
+        user.isEmailVerified = effectiveEmailVerified;
         shouldSave = true;
       }
       if (shouldSave) {
@@ -160,6 +165,16 @@ exports.protect = async (req, res, next) => {
     }
 
     // Enforce verified email before allowing access to protected API routes.
+    const emailVerified =
+      oryEmailVerified ||
+      shouldBeAdmin ||
+      (user.role === "admin" && user.isEmailVerified === true);
+
+    if (user.isEmailVerified !== emailVerified) {
+      user.isEmailVerified = emailVerified;
+      await user.save();
+    }
+
     if (!emailVerified) {
       return res.status(403).json({
         success: false,
