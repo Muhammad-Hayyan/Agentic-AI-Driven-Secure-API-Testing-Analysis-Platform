@@ -25,7 +25,9 @@ export default function SignupPage() {
         const flowData = await createRegistrationFlow();
         setFlow(flowData);
       } catch (err) {
-        console.error("Error initializing registration flow:", err);
+        if (process.env.NODE_ENV === "development") {
+          console.error("Registration flow initialization failed");
+        }
         if (err.response?.status === 400) {
           // If a session already exists or the flow is stale, redirect to login or dashboard
           window.location.href = "/login";
@@ -67,8 +69,9 @@ export default function SignupPage() {
       toast.success("Account created successfully!");
       setIsSuccess(true);
     } catch (err) {
-      console.error("Registration error:", err);
-      console.error("Ory response body:", JSON.stringify(err.response?.data, null, 2));
+      if (process.env.NODE_ENV === "development") {
+        console.error("Registration request failed");
+      }
 
       const uiMessages = err.response?.data?.ui?.messages || [];
       const nodeMessages = (err.response?.data?.ui?.nodes || [])
@@ -82,7 +85,7 @@ export default function SignupPage() {
         ...nodeMessages.map(m => m.field ? `${m.field}: ${m.text}` : m.text),
       ];
 
-      const message = allMessages[0] || err.response?.data?.error?.message || "Registration failed. Check the console for the Ory response.";
+      const message = allMessages[0] || err.response?.data?.error?.message || "Registration failed. Please try again.";
       toast.error(message);
     } finally {
       setLoading(false);

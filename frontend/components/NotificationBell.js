@@ -70,7 +70,7 @@ export default function NotificationBell() {
          */
         rateLimitedUntil.current = Date.now() + POLL_INTERVAL_MS * 2;
       }
-      if (process.env.NODE_ENV === "development") {
+      if (process.env.NODE_ENV === "development" && err?.response?.status !== 401) {
         console.error("Notif fetch failed", err);
       }
     }
@@ -81,7 +81,9 @@ export default function NotificationBell() {
       await markAsRead(id);
       fetchNotifications();
     } catch (err) {
-      console.error("Mark read failed", err);
+      if (process.env.NODE_ENV === "development") {
+        console.error("Mark read failed", err);
+      }
     }
   };
 

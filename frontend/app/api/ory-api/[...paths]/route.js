@@ -60,6 +60,22 @@ function rewriteSetCookie(cookieHeader) {
   return cookieHeader.replace(/;\s*Domain=[^;]+/i, "");
 }
 
+function canIncludeBody(method, status) {
+  if (method === "HEAD") return false;
+  return status !== 204 && status !== 205 && status !== 304;
+}
+
+function isTextLikeContentType(contentType = "") {
+  const lower = contentType.toLowerCase();
+  return (
+    lower.startsWith("text/") ||
+    lower.includes("application/json") ||
+    lower.includes("application/javascript") ||
+    lower.includes("application/xml") ||
+    lower.includes("application/x-www-form-urlencoded")
+  );
+}
+
 async function handleProxy(request, params) {
   const { paths } = await params;
   const path = paths.join("/");
@@ -120,20 +136,26 @@ async function handleProxy(request, params) {
       }
     }
 
-    const buf = Buffer.from(await response.arrayBuffer());
-    let body;
-    try {
-      body = buf.toString("utf-8").replaceAll(sdkUrl, PROXY_BASE);
-    } catch {
-      body = buf;
+    const shouldIncludeBody = canIncludeBody(request.method, response.status);
+    let body = null;
+    if (shouldIncludeBody) {
+      const buf = Buffer.from(await response.arrayBuffer());
+      const contentType = response.headers.get("content-type") || "";
+      if (isTextLikeContentType(contentType)) {
+        body = buf.toString("utf-8").replaceAll(sdkUrl, PROXY_BASE);
+      } else {
+        body = buf;
+      }
     }
 
-    return new NextResponse(body, {
+    return new NextResponse(shouldIncludeBody ? body : null, {
       status: response.status,
       headers: responseHeaders,
     });
   } catch (error) {
-    console.error("Ory Proxy Error:", error);
+    if (process.env.NODE_ENV === "development") {
+      console.error("Ory Proxy Error");
+    }
     // [Error Handling] Do not expose upstream hostnames or SDK internals to the browser.
     const status = error?.name === "AbortError" ? 504 : 500;
     const message =

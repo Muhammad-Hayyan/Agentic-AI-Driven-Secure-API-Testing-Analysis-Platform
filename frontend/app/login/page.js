@@ -45,7 +45,7 @@ export default function LoginPage() {
         setFlow(flowData);
       } catch (err) {
         if (process.env.NODE_ENV === "development") {
-          console.error("Error initializing login flow:", err);
+          console.error("Login flow initialization failed");
         }
         if (err.message === "LOGIN_FLOW_TIMEOUT") {
           toast.error("Login setup timed out. Check ORY_SDK_URL / NEXT_PUBLIC_ORY_SDK_URL and restart the dev server.");
@@ -80,7 +80,7 @@ export default function LoginPage() {
       router.push("/dashboard");
     } catch (err) {
       if (process.env.NODE_ENV === "development") {
-        console.error("Login error:", err);
+        console.error("Login request failed");
       }
 
       const uiMessages = err.response?.data?.ui?.messages || [];

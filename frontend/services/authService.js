@@ -84,11 +84,10 @@ export const logout = async () => {
     if (data?.logout_token) {
       await ory.updateLogoutFlow({ token: data.logout_token });
     }
-  } catch (err) {
+  } catch {
     // 401 here usually means "no active session", which is fine for logout.
-    if (err.response?.status !== 401) {
-      console.error("Ory logout error:", err.response?.data || err.message);
-    }
+    // We intentionally suppress detailed client-side logout errors to avoid
+    // leaking proxy/auth internals in browser logs.
   }
 };
 
