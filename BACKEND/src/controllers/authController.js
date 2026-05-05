@@ -34,13 +34,13 @@
  *     database to prevent stale, unconfirmed tokens accumulating.
  */
 
-const crypto   = require("crypto");
-const jwt      = require("jsonwebtoken");
-const User     = require("../models/User");
+const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 const sendEmail = require("../utils/email");
 const { verificationEmail, resetPasswordEmail, twoFactorEmail } = require("../templates/emailTemplates");
 const speakeasy = require("speakeasy");
-const qrcode    = require("qrcode");
+const qrcode = require("qrcode");
 
 const MFA_CHALLENGE_PURPOSE = "login-2fa";
 const MFA_CHALLENGE_TTL = "5m";
@@ -75,7 +75,7 @@ const requireJwtSecret = () => {
  */
 const signToken = (id) => {
   return jwt.sign({ id }, requireJwtSecret(), {
-    expiresIn: "30d",
+    expiresIn: "1d",
   });
 };
 
@@ -191,7 +191,7 @@ exports.register = async (req, res, next) => {
       });
     } catch (err) {
       // [Error Handling] Clean up tokens if email sending fails
-      user.verificationToken       = undefined;
+      user.verificationToken = undefined;
       user.verificationTokenExpire = undefined;
       await user.save({ validateBeforeSave: false });
       return res.status(500).json({ success: false, message: "Email could not be sent. Please try again later." });
@@ -219,7 +219,7 @@ exports.verifyEmail = async (req, res, next) => {
     const hashedToken = crypto.createHash("sha256").update(req.body.token).digest("hex");
 
     const user = await User.findOne({
-      verificationToken:       hashedToken,
+      verificationToken: hashedToken,
       verificationTokenExpire: { $gt: Date.now() }, // Token must not be expired
     });
 
@@ -227,8 +227,8 @@ exports.verifyEmail = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Token is invalid or has expired" });
     }
 
-    user.isEmailVerified     = true;
-    user.verificationToken   = undefined; // One-time use: clear token after verification
+    user.isEmailVerified = true;
+    user.verificationToken = undefined; // One-time use: clear token after verification
     user.verificationTokenExpire = undefined;
     await user.save();
 
@@ -351,7 +351,7 @@ exports.login = async (req, res, next) => {
 
     // Reset lockout counters on successful authentication
     user.loginAttempts = 0;
-    user.lockUntil     = undefined;
+    user.lockUntil = undefined;
 
     // [Authentication Bypass - MFA] If 2FA enabled, require TOTP before issuing token
     if (user.isTwoFactorEnabled) {
@@ -408,7 +408,7 @@ exports.verifyLogin2FA = async (req, res, next) => {
 
     // [Authentication Bypass - MFA] TOTP verification via speakeasy
     const verified = speakeasy.totp.verify({
-      secret:   user.twoFactorSecret,
+      secret: user.twoFactorSecret,
       encoding: "base32",
       token,
     });
@@ -458,15 +458,15 @@ exports.forgotPassword = async (req, res, next) => {
 
     try {
       await sendEmail({
-        email:   user.email,
+        email: user.email,
         subject: "Reset your Topic AI password",
-        html:    resetPasswordEmail(resetUrl),
+        html: resetPasswordEmail(resetUrl),
       });
 
       res.status(200).json({ success: true, message: GENERIC_RESET_MESSAGE });
     } catch (err) {
       // [Error Handling] Clear tokens so the broken link cannot be reused
-      user.resetPasswordToken  = undefined;
+      user.resetPasswordToken = undefined;
       user.resetPasswordExpire = undefined;
       await user.save({ validateBeforeSave: false });
       return res.status(500).json({ success: false, message: "Email could not be sent" });
@@ -497,7 +497,7 @@ exports.resetPassword = async (req, res, next) => {
     const hashedToken = crypto.createHash("sha256").update(req.body.token).digest("hex");
 
     const user = await User.findOne({
-      resetPasswordToken:  hashedToken,
+      resetPasswordToken: hashedToken,
       resetPasswordExpire: { $gt: Date.now() }, // Token must not be expired
     });
 
@@ -506,8 +506,8 @@ exports.resetPassword = async (req, res, next) => {
     }
 
     // [The Hidden Dangers in Password Handling] bcrypt hashing triggered by pre-save hook
-    user.password           = req.body.password;
-    user.resetPasswordToken  = undefined; // Invalidate token after use
+    user.password = req.body.password;
+    user.resetPasswordToken = undefined; // Invalidate token after use
     user.resetPasswordExpire = undefined;
     await user.save();
 
@@ -569,7 +569,7 @@ exports.activate2FA = async (req, res, next) => {
     const user = await User.findById(req.user.id).select("+twoFactorAuthTempSecret");
 
     const verified = speakeasy.totp.verify({
-      secret:   user.twoFactorAuthTempSecret,
+      secret: user.twoFactorAuthTempSecret,
       encoding: "base32",
       token,
     });
@@ -579,9 +579,9 @@ exports.activate2FA = async (req, res, next) => {
     }
 
     // [Authentication Bypass - MFA] Promote temp secret to active only after verification
-    user.twoFactorSecret         = user.twoFactorAuthTempSecret;
+    user.twoFactorSecret = user.twoFactorAuthTempSecret;
     user.twoFactorAuthTempSecret = undefined;
-    user.isTwoFactorEnabled      = true;
+    user.isTwoFactorEnabled = true;
     await user.save();
 
     res.status(200).json({ success: true, message: "Two-Factor Authentication activated successfully." });
@@ -611,7 +611,7 @@ exports.disable2FA = async (req, res, next) => {
       return res.status(401).json({ success: false, message: "Invalid password" });
     }
 
-    user.twoFactorSecret    = undefined;
+    user.twoFactorSecret = undefined;
     user.isTwoFactorEnabled = false;
     await user.save();
 
@@ -634,7 +634,7 @@ exports.disable2FA = async (req, res, next) => {
  */
 exports.logout = async (req, res, next) => {
   res.cookie("token", "none", {
-    expires:  new Date(Date.now() + 10 * 1000),
+    expires: new Date(Date.now() + 10 * 1000),
     httpOnly: true,
   });
 
